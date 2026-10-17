@@ -13,19 +13,36 @@ function lex_mail_error(?string $message = null): ?string
     return $GLOBALS['lexLastMailError'] ?? null;
 }
 
+function lex_mail_setting(string $settingKey, string $envKey, string $default = ''): string
+{
+    $envValue = function_exists('lex_env') ? lex_env($envKey) : null;
+    if ($envValue !== null && trim($envValue) !== '') {
+        return trim((string) $envValue);
+    }
+
+    return trim(lex_site_setting($settingKey, $default));
+}
+
 function lex_phpmailer_send(string $to, string $subject, string $body): bool
 {
-    $host = lex_site_setting('smtp_host');
-    $port = (int) lex_site_setting('smtp_port', '587');
-    $user = lex_site_setting('smtp_user');
-    $pass = lex_site_setting('smtp_pass');
+    $host = lex_mail_setting('smtp_host', 'SMTP_HOST');
+    $port = (int) lex_mail_setting('smtp_port', 'SMTP_PORT', '587');
+    $user = lex_mail_setting('smtp_user', 'SMTP_USER');
+    $pass = lex_mail_setting('smtp_pass', 'SMTP_PASS');
+    $encryption = strtolower(lex_mail_setting('smtp_encryption', 'SMTP_ENCRYPTION', $port === 465 ? 'ssl' : 'tls'));
+    $fromEmail = lex_mail_setting('smtp_from_email', 'SMTP_FROM_EMAIL');
+    $fromName = lex_mail_setting('smtp_from_name', 'SMTP_FROM_NAME', lex_site_setting('site_name', LEX_APP_NAME));
+
     if ($host === '') {
         lex_mail_error('SMTP host is missing.');
         return false;
     }
 
-    $from = $user !== '' ? $user : ('no-reply@' . ($_SERVER['SERVER_NAME'] ?? 'localhost'));
-    $fromName = lex_site_setting('site_name', LEX_APP_NAME);
+    if ($port <= 0) {
+        $port = 587;
+    }
+
+    $from = $fromEmail !== '' ? $fromEmail : ($user !== '' ? $user : ('no-reply@' . ($_SERVER['SERVER_NAME'] ?? 'localhost')));
 
     $mail = new PHPMailer\PHPMailer\PHPMailer(true);
     try {
@@ -38,10 +55,13 @@ function lex_phpmailer_send(string $to, string $subject, string $body): bool
         $mail->CharSet = 'UTF-8';
         $mail->Timeout = 20;
 
-        if ($port === 465) {
+        if ($encryption === 'ssl' || $encryption === 'smtps') {
             $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
-        } else {
+        } elseif ($encryption === 'tls' || $encryption === 'starttls') {
             $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+        } else {
+            $mail->SMTPSecure = '';
+            $mail->SMTPAutoTLS = false;
         }
 
         $mail->setFrom($from, $fromName);
@@ -67,7 +87,7 @@ function lex_send_email(string $to, string $subject, string $body): bool
     if (lex_phpmailer_send($to, $subject, $body)) {
         return true;
     }
-    if (lex_site_setting('smtp_host') !== '') {
+    if (lex_mail_setting('smtp_host', 'SMTP_HOST') !== '') {
         return false;
     }
 

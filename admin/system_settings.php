@@ -164,10 +164,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'session_timeout' => lex_sanitize_text($_POST['session_timeout'] ?? ''),
             'smtp_host' => lex_sanitize_text($_POST['smtp_host'] ?? ''),
             'smtp_port' => lex_sanitize_text($_POST['smtp_port'] ?? ''),
+            'smtp_encryption' => in_array((string) ($_POST['smtp_encryption'] ?? 'tls'), ['tls', 'ssl', 'none'], true)
+                ? (string) ($_POST['smtp_encryption'] ?? 'tls')
+                : 'tls',
             'smtp_user' => lex_sanitize_email($_POST['smtp_user'] ?? ''),
             'smtp_pass' => trim((string) ($_POST['smtp_pass'] ?? '')) !== ''
                 ? (string) ($_POST['smtp_pass'] ?? '')
                 : (string) ($currentSettings['smtp_pass'] ?? ''),
+            'smtp_from_email' => lex_sanitize_email($_POST['smtp_from_email'] ?? ''),
+            'smtp_from_name' => lex_sanitize_text($_POST['smtp_from_name'] ?? ''),
             'login_otp_enabled' => isset($_POST['login_otp_enabled']) ? 'true' : 'false',
             'admin_otp_enabled' => isset($_POST['admin_otp_enabled']) ? 'true' : 'false',
             'client_registration_otp_enabled' => isset($_POST['client_registration_otp_enabled']) ? 'true' : 'false',
@@ -210,6 +215,14 @@ lex_page_header('System Settings', 'settings');
     <label>Session timeout (seconds) <input type="number" name="session_timeout" value="<?= lex_e($settings['session_timeout'] ?? '1800') ?>"></label>
     <label>SMTP host <input type="text" name="smtp_host" value="<?= lex_e($settings['smtp_host'] ?? '') ?>" placeholder="smtp.gmail.com"></label>
     <label>SMTP port <input type="number" name="smtp_port" value="<?= lex_e($settings['smtp_port'] ?? '587') ?>"></label>
+    <label>SMTP encryption
+      <select name="smtp_encryption">
+        <?php $smtpEncryption = (string) ($settings['smtp_encryption'] ?? 'tls'); ?>
+        <option value="tls" <?= $smtpEncryption === 'tls' ? 'selected' : '' ?>>STARTTLS</option>
+        <option value="ssl" <?= $smtpEncryption === 'ssl' ? 'selected' : '' ?>>SSL/TLS</option>
+        <option value="none" <?= $smtpEncryption === 'none' ? 'selected' : '' ?>>None</option>
+      </select>
+    </label>
     <label>SMTP user <input type="email" name="smtp_user" value="<?= lex_e($settings['smtp_user'] ?? '') ?>" placeholder="no-reply@example.com"></label>
     <label>SMTP password
       <div class="password-field" data-password-toggle>
@@ -217,6 +230,8 @@ lex_page_header('System Settings', 'settings');
         <button type="button" class="password-toggle" data-password-toggle-button aria-pressed="false" aria-label="Show password" title="Show password"><span class="sr-only">Show password</span></button>
       </div>
     </label>
+    <label>From email <input type="email" name="smtp_from_email" value="<?= lex_e($settings['smtp_from_email'] ?? '') ?>" placeholder="Optional; defaults to SMTP user"></label>
+    <label>From name <input type="text" name="smtp_from_name" value="<?= lex_e($settings['smtp_from_name'] ?? '') ?>" placeholder="LEXSHIELD"></label>
     <label class="checkbox-row full">
       <input type="checkbox" name="login_otp_enabled" value="1" <?= lex_bool_setting('login_otp_enabled', 'LOGIN_OTP_ENABLED', false) ? 'checked' : '' ?>>
       Require OTP for normal user login
@@ -297,4 +312,58 @@ lex_page_header('System Settings', 'settings');
     </form>
   </div>
 </section>
+<?php
+$storageStatus = lex_document_storage_status();
+$localQuota = (int) ($storageStatus['local_quota_bytes'] ?? 0);
+$localUsed = (int) ($storageStatus['local_used_bytes'] ?? 0);
+$localThreshold = (int) ($storageStatus['local_threshold_bytes'] ?? 0);
+$supabaseQuota = (int) ($storageStatus['supabase_quota_bytes'] ?? 0);
+$supabaseUsed = (int) ($storageStatus['supabase_used_bytes'] ?? 0);
+$localPercent = $localQuota > 0 ? min(100, ($localUsed / $localQuota) * 100) : 0;
+$thresholdPercent = (float) ($storageStatus['local_threshold_percent'] ?? 90);
+$supabasePercent = $supabaseQuota > 0 ? min(100, ($supabaseUsed / $supabaseQuota) * 100) : 0;
+?>
+
+<section class="card admin-settings-card admin-storage-card">
+  <div class="card-head">
+    <div>
+      <h2>Case Document Storage</h2>
+      <p class="muted">InfinityFree/local is primary. Supabase is used automatically when the local safety threshold is reached.</p>
+    </div>
+    <span class="storage-provider-badge">Primary: InfinityFree</span>
+  </div>
+  <div class="admin-storage-grid">
+    <article class="admin-storage-panel">
+      <div class="admin-storage-panel-head">
+        <div><span class="admin-storage-kicker">Primary storage</span><strong>InfinityFree</strong></div>
+        <span><?= lex_e(number_format($thresholdPercent, 0)) ?>% safety threshold</span>
+      </div>
+      <div class="storage-progress" aria-label="InfinityFree storage usage"><span style="width: <?= lex_e(number_format($localPercent, 2, '.', '')) ?>%"></span></div>
+      <div class="admin-storage-numbers">
+        <strong><?= lex_e(lex_human_file_size($localUsed)) ?> / <?= lex_e(lex_human_file_size($localQuota)) ?></strong>
+        <span><?= lex_e(lex_human_file_size(max(0, $localThreshold - $localUsed))) ?> until overflow threshold</span>
+      </div>
+      <p class="muted admin-storage-note">Usage is measured from LexShield's <code>config/storage</code> directory. The threshold is configurable because shared hosting does not reliably expose an account-level quota through PHP.</p>
+    </article>
+
+    <article class="admin-storage-panel">
+      <div class="admin-storage-panel-head">
+        <div><span class="admin-storage-kicker">Automatic overflow</span><strong>Supabase</strong></div>
+        <span><?= !empty($storageStatus['supabase_configured']) ? 'Configured' : 'Not configured' ?></span>
+      </div>
+      <div class="storage-progress" aria-label="Supabase tracked usage"><span style="width: <?= lex_e(number_format($supabasePercent, 2, '.', '')) ?>%"></span></div>
+      <div class="admin-storage-numbers">
+        <strong><?= lex_e(lex_human_file_size($supabaseUsed)) ?> / <?= lex_e(lex_human_file_size($supabaseQuota)) ?></strong>
+        <span>Tracked LexShield case-document usage</span>
+      </div>
+      <p class="muted admin-storage-note">Supabase usage is tracked from case-document metadata. It does not claim to measure unrelated objects stored in your Supabase project.</p>
+    </article>
+  </div>
+  <div class="admin-storage-routing">
+    <div><span>Routing</span><strong>InfinityFree → Supabase overflow</strong></div>
+    <div><span>Encryption</span><strong>AES-256-GCM remains enabled</strong></div>
+    <div><span>Duplicate policy</span><strong>No automatic duplicate copy</strong></div>
+  </div>
+</section>
+
 <?php lex_page_footer(); ?>

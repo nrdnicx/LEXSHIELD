@@ -270,14 +270,101 @@ function lex_supabase_storage_delete(string $objectPath): void
 
 function lex_storage_preferred_provider(): string
 {
-    $preference = strtolower(trim((string) (getenv('STORAGE_PREFERENCE') ?: 'supabase')));
-    return in_array($preference, ['supabase', 'local'], true) ? $preference : 'supabase';
+    $preference = strtolower(trim((string) (getenv('STORAGE_PREFERENCE') ?: 'local')));
+    return in_array($preference, ['supabase', 'local'], true) ? $preference : 'local';
+}
+
+function lex_local_storage_quota_bytes(): int
+{
+    $quotaGb = (float) (getenv('LOCAL_STORAGE_QUOTA_GB') ?: 5);
+    if ($quotaGb <= 0) {
+        return 0;
+    }
+    return (int) round($quotaGb * 1024 * 1024 * 1024);
+}
+
+function lex_local_storage_threshold_percent(): float
+{
+    $percent = (float) (getenv('LOCAL_STORAGE_THRESHOLD_PERCENT') ?: 90);
+    return min(100.0, max(1.0, $percent));
 }
 
 function lex_local_storage_reserve_bytes(): int
 {
     $reserveMb = (int) (getenv('LOCAL_STORAGE_RESERVE_MB') ?: 100);
     return max(0, $reserveMb) * 1024 * 1024;
+}
+
+function lex_directory_size_bytes(string $directory): int
+{
+    if (!is_dir($directory)) {
+        return 0;
+    }
+
+    $total = 0;
+    try {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $item) {
+            if ($item->isFile() && !$item->isLink()) {
+                $size = $item->getSize();
+                if ($size > 0) {
+                    $total += $size;
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('[STORAGE] Unable to calculate directory usage: ' . $e->getMessage());
+    }
+
+    return $total;
+}
+
+function lex_local_storage_root(): string
+{
+    $root = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'storage';
+    if (!is_dir($root)) {
+        @mkdir($root, 0775, true);
+    }
+    return $root;
+}
+
+function lex_local_storage_capacity_status(int $additionalBytes = 0): array
+{
+    $root = lex_local_storage_root();
+    $quotaBytes = lex_local_storage_quota_bytes();
+    $thresholdPercent = lex_local_storage_threshold_percent();
+    $thresholdBytes = $quotaBytes > 0
+        ? (int) floor($quotaBytes * ($thresholdPercent / 100))
+        : 0;
+    $usedBytes = lex_directory_size_bytes($root);
+    $reserveBytes = lex_local_storage_reserve_bytes();
+    $projectedBytes = max(0, $usedBytes) + max(0, $additionalBytes);
+    $withinConfiguredThreshold = $quotaBytes > 0 && $projectedBytes <= max(0, $thresholdBytes - $reserveBytes);
+
+    $filesystemFreeBytes = null;
+    if (function_exists('disk_free_space')) {
+        $free = @disk_free_space($root);
+        if (is_int($free) || is_float($free)) {
+            $filesystemFreeBytes = (int) $free;
+        }
+    }
+
+    return [
+        'root' => $root,
+        'quota_bytes' => $quotaBytes,
+        'used_bytes' => $usedBytes,
+        'threshold_percent' => $thresholdPercent,
+        'threshold_bytes' => $thresholdBytes,
+        'reserve_bytes' => $reserveBytes,
+        'projected_bytes' => $projectedBytes,
+        'within_threshold' => $withinConfiguredThreshold,
+        'filesystem_free_bytes' => $filesystemFreeBytes,
+        'filesystem_has_space' => $filesystemFreeBytes === null
+            ? true
+            : $filesystemFreeBytes >= ($additionalBytes + $reserveBytes),
+    ];
 }
 
 function lex_local_storage_can_store(string $directory, int $bytes): bool
@@ -291,16 +378,54 @@ function lex_local_storage_can_store(string $directory, int $bytes): bool
     if (!is_writable($directory)) {
         return false;
     }
-    if (!function_exists('disk_free_space')) {
-        return false;
-    }
 
-    $free = @disk_free_space($directory);
-    if (!is_int($free) && !is_float($free)) {
-        return false;
-    }
+    $capacity = lex_local_storage_capacity_status($bytes);
+    return $capacity['within_threshold'] && $capacity['filesystem_has_space'];
+}
 
-    return (float) $free >= ($bytes + lex_local_storage_reserve_bytes());
+function lex_supabase_storage_tracked_usage_bytes(): int
+{
+    try {
+        $pdo = lex_pdo();
+        $stmt = $pdo->query(
+            "SELECT COALESCE(SUM(file_size), 0)
+             FROM case_file_documents
+             WHERE storage_provider = 'supabase'"
+        );
+        return max(0, (int) $stmt->fetchColumn());
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+function lex_supabase_storage_quota_bytes(): int
+{
+    $quotaGb = (float) (getenv('SUPABASE_STORAGE_QUOTA_GB') ?: 1);
+    return $quotaGb > 0 ? (int) round($quotaGb * 1024 * 1024 * 1024) : 0;
+}
+
+function lex_document_storage_status(int $fileSize = 0): array
+{
+    $capacity = lex_local_storage_capacity_status($fileSize);
+    $supabaseUsed = lex_supabase_storage_tracked_usage_bytes();
+    $supabaseQuota = lex_supabase_storage_quota_bytes();
+    $supabaseConfigured = lex_supabase_storage_configured();
+
+    return [
+        'supabase_configured' => $supabaseConfigured,
+        'local_storage_available' => $capacity['within_threshold'] && $capacity['filesystem_has_space'],
+        'preferred_provider' => lex_storage_preferred_provider(),
+        'local_has_space_for_file' => $capacity['within_threshold'] && $capacity['filesystem_has_space'],
+        'local_quota_bytes' => $capacity['quota_bytes'],
+        'local_used_bytes' => $capacity['used_bytes'],
+        'local_threshold_bytes' => $capacity['threshold_bytes'],
+        'local_threshold_percent' => $capacity['threshold_percent'],
+        'local_remaining_to_threshold_bytes' => max(0, $capacity['threshold_bytes'] - $capacity['used_bytes']),
+        'supabase_quota_bytes' => $supabaseQuota,
+        'supabase_used_bytes' => $supabaseUsed,
+        'supabase_remaining_bytes' => $supabaseQuota > 0 ? max(0, $supabaseQuota - $supabaseUsed) : 0,
+        'last_fallback_reason' => lex_storage_last_fallback_reason(),
+    ];
 }
 
 function lex_storage_last_fallback_reason(?string $reason = null): string
@@ -310,18 +435,6 @@ function lex_storage_last_fallback_reason(?string $reason = null): string
         $lastReason = substr($reason, 0, 180);
     }
     return $lastReason;
-}
-
-function lex_document_storage_status(int $fileSize = 0): array
-{
-    $localDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'case_files';
-    return [
-        'supabase_configured' => lex_supabase_storage_configured(),
-        'local_storage_available' => lex_local_storage_can_store($localDir, $fileSize),
-        'preferred_provider' => lex_storage_preferred_provider(),
-        'local_has_space_for_file' => lex_local_storage_can_store($localDir, $fileSize),
-        'last_fallback_reason' => lex_storage_last_fallback_reason(),
-    ];
 }
 
 function lex_human_file_size(int $bytes): string
@@ -347,6 +460,7 @@ function lex_allowed_upload_types(): array
         'jpeg' => ['image/jpeg'],
         'png' => ['image/png'],
         'webp' => ['image/webp'],
+        'doc' => ['application/msword'],
         'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
         'mp3' => ['audio/mpeg'],
         'wav' => ['audio/wav', 'audio/x-wav'],
@@ -464,7 +578,18 @@ function lex_validate_allowed_upload_type(string $path, string $originalName, st
         }
     }
 
-    if (!in_array($mime, $allowed[$extension], true)) {
+    $mimeAccepted = in_array($mime, $allowed[$extension], true);
+    if (!$mimeAccepted && $extension === 'doc' && $mime === 'application/octet-stream') {
+        $handle = @fopen($path, 'rb');
+        $header = $handle ? @fread($handle, 8) : false;
+        if (is_resource($handle)) {
+            fclose($handle);
+        }
+        // Legacy .doc files are OLE Compound File containers. Some hosts report
+        // those files as application/octet-stream instead of application/msword.
+        $mimeAccepted = is_string($header) && $header === "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1";
+    }
+    if (!$mimeAccepted) {
         lex_reject_upload($context, 'The uploaded file does not match its file type.');
     }
 

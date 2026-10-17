@@ -6630,6 +6630,87 @@ html[data-theme="dark"] .admin-lawyer-cancel {
 }
 
 .admin-client-card,
+.admin-storage-card .card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.admin-storage-card .card-head > div { min-width: 0; }
+.storage-provider-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.admin-storage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+.admin-storage-panel {
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 16px;
+  background: rgba(255,255,255,.025);
+}
+.admin-storage-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.admin-storage-panel-head > div { display: grid; gap: 3px; }
+.admin-storage-panel-head > span { font-size: .76rem; opacity: .72; }
+.admin-storage-kicker { text-transform: uppercase; letter-spacing: .08em; font-size: .68rem; opacity: .62; }
+.storage-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+}
+.storage-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: .8;
+}
+.admin-storage-numbers {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.admin-storage-numbers span { font-size: .78rem; opacity: .68; text-align: right; }
+.admin-storage-note { margin: 12px 0 0; font-size: .78rem; line-height: 1.55; }
+.admin-storage-routing {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.admin-storage-routing > div {
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(255,255,255,.07);
+}
+.admin-storage-routing span { display:block; font-size:.7rem; text-transform:uppercase; letter-spacing:.07em; opacity:.55; margin-bottom:4px; }
+.admin-storage-routing strong { font-size:.82rem; }
+@media (max-width: 820px) {
+  .admin-storage-card .card-head, .admin-storage-numbers { flex-direction: column; }
+  .admin-storage-grid, .admin-storage-routing { grid-template-columns: 1fr; }
+  .admin-storage-numbers span { text-align: left; }
+}
+
 .admin-settings-card {
   padding: 0.85rem;
 }

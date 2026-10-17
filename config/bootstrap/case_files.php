@@ -297,10 +297,20 @@ function lex_case_file_vault_delete_document_object(array $caseFile, array $docu
     }
 }
 
-function lex_case_file_vault_provider_order(): array
+function lex_case_file_vault_provider_order(int $fileSize = 0): array
 {
     $preferred = lex_storage_preferred_provider();
-    return $preferred === 'local' ? ['local', 'supabase'] : ['supabase', 'local'];
+    
+    // InfinityFree/local is the primary provider. If the configured quota threshold
+    // would be exceeded, skip the local write and use Supabase as overflow.
+    $capacity = lex_local_storage_capacity_status($fileSize);
+    if ($preferred === 'local' && $capacity['within_threshold'] && $capacity['filesystem_has_space']) {
+        return ['local', 'supabase'];
+    }
+    if ($preferred === 'supabase') {
+        return ['supabase', 'local'];
+    }
+    return ['supabase', 'local'];
 }
 
 function lex_case_file_vault_store_encrypted_data(
@@ -556,7 +566,7 @@ function lex_case_file_vault_store_document(array $caseFile, int $folderId, arra
             'folder_id' => $folderId,
             'original_name' => $originalName,
             'stored_name' => $storedName,
-            'storage_provider' => 'supabase',
+            'storage_provider' => 'local',
             'storage_path' => $storagePath,
             'mime_type' => $validatedType['mime_type'],
             'file_size' => $size,
@@ -571,7 +581,7 @@ function lex_case_file_vault_store_document(array $caseFile, int $folderId, arra
         ]);
         $documentId = (int) $pdo->lastInsertId();
         $fallbackReasons = [];
-        foreach (lex_case_file_vault_provider_order() as $provider) {
+        foreach (lex_case_file_vault_provider_order(strlen($encrypted['data'])) as $provider) {
             try {
                 error_log('[CASE_FILE_STORAGE] Trying encrypted document storage provider: ' . $provider);
                 $storage = lex_case_file_vault_store_encrypted_data($provider, $caseFile, $folder, $documentId, $storedName, $encrypted['data']);
