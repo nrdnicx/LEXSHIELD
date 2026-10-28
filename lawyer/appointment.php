@@ -385,7 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && lex_csrf_validate($_POST['csrf_toke
             $lockAcquired = false;
             try {
                 if ($status !== 'cancelled') {
-                    $validation = lex_validate_appointment_schedule($pdo, $lawyerId, $effectiveScheduledAt, $appointmentId);
+                    $validation = lex_validate_lawyer_reschedule($pdo, $lawyerId, $effectiveScheduledAt, $appointmentId);
                     if (!$validation['ok']) {
                         throw new LexAppointmentBookingException((string) $validation['error']);
                     }
@@ -395,7 +395,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && lex_csrf_validate($_POST['csrf_toke
                     if (!$lockAcquired) {
                         throw new LexAppointmentBookingException('The appointment system is busy. Please try again.');
                     }
-                    $validation = lex_validate_appointment_schedule($pdo, $lawyerId, $effectiveScheduledAt, $appointmentId);
+                    $validation = lex_validate_lawyer_reschedule($pdo, $lawyerId, $effectiveScheduledAt, $appointmentId);
                     if (!$validation['ok']) {
                         throw new LexAppointmentBookingException((string) $validation['error']);
                     }
@@ -409,7 +409,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && lex_csrf_validate($_POST['csrf_toke
                     throw new LexAppointmentBookingException('The lawyer account is no longer available.');
                 }
                 if ($status !== 'cancelled') {
-                    $validation = lex_validate_appointment_schedule($pdo, $lawyerId, $effectiveScheduledAt, $appointmentId);
+                    $validation = lex_validate_lawyer_reschedule($pdo, $lawyerId, $effectiveScheduledAt, $appointmentId);
                     if (!$validation['ok']) {
                         throw new LexAppointmentBookingException((string) $validation['error']);
                     }
@@ -442,7 +442,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && lex_csrf_validate($_POST['csrf_toke
                     // when either participant actually joins the call.
                     lex_video_prepare_for_confirmed_appointment($appointmentId);
                 }
-                $message = $status === 'confirmed' ? 'Appointment approved.' : ($status === 'cancelled' ? 'Appointment cancelled.' : 'Appointment updated.');
+                $previousSchedule = date('Y-m-d H:i', strtotime((string) $appointment['scheduled_at']));
+                $scheduleChanged = $scheduledAt !== '' && $scheduledAt !== $previousSchedule;
+                if ($status === 'cancelled') {
+                    $message = 'Appointment cancelled.';
+                } elseif ($scheduleChanged) {
+                    $message = 'Appointment rescheduled to ' . date('M j, Y g:i A', strtotime($effectiveScheduledAt)) . '.';
+                } else {
+                    $message = $status === 'confirmed' ? 'Appointment approved.' : 'Appointment updated.';
+                }
                 lex_notify((int) $appointment['client_user_id'], 'appointment', $message);
                 lex_flash_set('success', $message);
                 header('Location: ' . $returnUrl);

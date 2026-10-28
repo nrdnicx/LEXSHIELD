@@ -400,6 +400,7 @@ if ($otpStep && $otpEmail === '' && !empty($_SESSION['pending_login_otp']['email
 }
 $otpExpiresAt = $otpStep ? (int) ($_SESSION['pending_login_otp']['expires_at'] ?? 0) : 0;
 $otpRemainingSeconds = $otpExpiresAt > time() ? $otpExpiresAt - time() : 0;
+$otpInputInvalid = $otpStep && $error !== '';
 
 lex_auth_page_header('Secure Login');
 ?>
@@ -461,8 +462,9 @@ lex_auth_page_header('Secure Login');
         <?= lex_csrf_field() ?>
         <input type="hidden" name="action" value="verify_otp">
         <label>Verification code
-          <input type="text" name="otp_code" required inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="1234" autocomplete="one-time-code" autofocus>
+          <input type="text" name="otp_code" required inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="1234" autocomplete="one-time-code" autofocus<?= $otpInputInvalid ? ' class="is-invalid" aria-invalid="true" aria-describedby="loginOtpError"' : '' ?>>
         </label>
+        <?php if ($otpInputInvalid): ?><p class="auth-otp-error" id="loginOtpError" role="alert"><?= lex_e($error) ?></p><?php endif; ?>
         <button class="button button-primary auth-submit" type="submit">Verify &amp; Login</button>
       </form>
       <div class="auth-otp-actions">

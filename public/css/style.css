@@ -23634,6 +23634,34 @@ html[data-theme="light"] body.app-workspace:has(.admin-inquiries-card) .admin-in
   letter-spacing: 0;
 }
 
+.auth-otp-form input[name="otp_code"].is-invalid {
+  border-color: #ef5368;
+  background: rgba(239, 83, 104, 0.1);
+  box-shadow: 0 0 0 3px rgba(239, 83, 104, 0.14);
+}
+
+.auth-otp-form input[name="otp_code"].is-invalid:focus {
+  border-color: #ff7182;
+  box-shadow: 0 0 0 4px rgba(239, 83, 104, 0.2);
+}
+
+.auth-otp-error {
+  margin: -0.35rem 0 0.15rem;
+  color: #ff8795;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+html[data-theme="light"] .auth-otp-form input[name="otp_code"].is-invalid {
+  border-color: #c43d51;
+  background: #fff1f2;
+  box-shadow: 0 0 0 3px rgba(196, 61, 81, 0.12);
+}
+
+html[data-theme="light"] .auth-otp-error {
+  color: #a92d40;
+}
+
 .auth-otp-timer {
   display: flex;
   align-items: center;

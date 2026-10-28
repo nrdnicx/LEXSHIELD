@@ -127,11 +127,6 @@ function lex_video_remote_jaas_token(array $meeting, array $user): ?array
     }
 
     $now = time();
-    $scheduledAt = strtotime((string) ($meeting['scheduled_at'] ?? ''));
-    $joinEnd = $scheduledAt !== false
-        ? $scheduledAt + (lex_video_join_late_minutes() * 60)
-        : $now + 3600;
-
     $payload = [
         'meeting' => [
             'room' => (string) ($meeting['meeting_room'] ?? ''),
@@ -144,7 +139,9 @@ function lex_video_remote_jaas_token(array $meeting, array $user): ?array
             'email' => trim((string) ($user['email'] ?? '')),
             'role' => (string) ($user['role'] ?? ''),
         ],
-        'expiresAt' => min($joinEnd + 300, $now + 3600),
+        // Tokens are short-lived credentials for the current call session, not
+        // credentials bounded by the appointment's scheduled time.
+        'expiresAt' => $now + 3600,
     ];
     $body = json_encode($payload, JSON_UNESCAPED_SLASHES);
     if (!is_string($body)) {
@@ -374,13 +371,10 @@ function lex_video_consultation_for_user(int $appointmentId, int $userId): ?arra
             return null;
         }
 
-        $joinStart = $scheduledAt - (lex_video_join_early_minutes() * 60);
-        $joinEnd = $scheduledAt + (lex_video_join_late_minutes() * 60);
-        $now = time();
-
-        $row['can_join'] = $now >= $joinStart && $now <= $joinEnd;
-        $row['join_starts_at'] = date('c', $joinStart);
-        $row['join_ends_at'] = date('c', $joinEnd);
+        // Confirmed appointments are available for an on-demand call at any time.
+        // Keep can_join for existing callers while authorization remains tied to
+        // the confirmed appointment and its assigned client/lawyer.
+        $row['can_join'] = true;
         $row['video_domain'] = lex_video_domain_for_provider((string) $row['meeting_provider']);
 
             return $row;
@@ -441,13 +435,8 @@ function lex_video_thread_for_user(int $caseId, int $userId, int $partnerUserId)
             return null;
         }
 
-        $joinStart = $scheduledAt - (lex_video_join_early_minutes() * 60);
-        $joinEnd = $scheduledAt + (lex_video_join_late_minutes() * 60);
-        $now = time();
-
-        $row['can_join'] = $now >= $joinStart && $now <= $joinEnd;
-        $row['join_starts_at'] = date('c', $joinStart);
-        $row['join_ends_at'] = date('c', $joinEnd);
+        // Confirmed appointments are available for an on-demand call at any time.
+        $row['can_join'] = true;
         $row['video_domain'] = lex_video_domain_for_provider((string) $row['meeting_provider']);
             return $row;
         });

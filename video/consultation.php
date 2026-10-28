@@ -14,29 +14,8 @@ if (!$meeting) {
     <main class="page-container">
       <section class="card video-access-card">
         <div class="card-head"><h1>Video Consultation</h1></div>
-        <p class="muted">This consultation is unavailable. It may not be confirmed, may belong to another user, or its meeting window may no longer be active.</p>
+        <p class="muted">This consultation is unavailable. It may not be confirmed or may belong to another user.</p>
         <a class="button button-secondary" href="<?= lex_e(lex_app_url($user['role'] === 'lawyer' ? 'lawyer/messages.php' : 'client/messages.php')) ?>">Back to Messages</a>
-      </section>
-    </main>
-    <?php
-    lex_page_footer();
-    exit;
-}
-
-if (empty($meeting['can_join'])) {
-    lex_page_header('Video Consultation', 'messages', $user);
-    $start = strtotime((string) $meeting['join_starts_at']);
-    $end = strtotime((string) $meeting['join_ends_at']);
-    ?>
-    <main class="page-container">
-      <section class="card video-access-card">
-        <div class="card-head"><h1>Video Consultation</h1><span class="pill">Scheduled</span></div>
-        <div class="video-schedule-box">
-          <strong><?= lex_e(date('F j, Y g:i A', strtotime((string) $meeting['scheduled_at']))) ?></strong>
-          <span>Join window: <?= lex_e($start ? date('g:i A', $start) : '—') ?> – <?= lex_e($end ? date('g:i A', $end) : '—') ?></span>
-        </div>
-        <p class="muted">The video room is not open yet. Return to Messages when the join window begins.</p>
-        <a class="button button-secondary" href="<?= lex_e(lex_app_url($user['role'] === 'lawyer' ? 'lawyer/messages.php?thread=client:' . (int) $meeting['case_id'] : 'client/messages.php?thread=lawyer:' . (int) $meeting['case_id'])) ?>">Back to Messages</a>
       </section>
     </main>
     <?php

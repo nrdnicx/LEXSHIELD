@@ -33,7 +33,7 @@ class LexAppointmentBookingException extends Exception
 
 function lex_appointment_session_lock(PDO $pdo, int $lawyerId, string $date, string $session): bool
 {
-    if ($lawyerId <= 0 || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date) || !in_array($session, ['morning', 'afternoon'], true)) {
+    if ($lawyerId <= 0 || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date) || !in_array($session, ['morning', 'afternoon', 'reschedule'], true)) {
         return false;
     }
 
@@ -46,7 +46,7 @@ function lex_appointment_session_lock(PDO $pdo, int $lawyerId, string $date, str
 
 function lex_appointment_session_unlock(PDO $pdo, int $lawyerId, string $date, string $session): void
 {
-    if ($lawyerId <= 0 || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date) || !in_array($session, ['morning', 'afternoon'], true)) {
+    if ($lawyerId <= 0 || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date) || !in_array($session, ['morning', 'afternoon', 'reschedule'], true)) {
         return;
     }
 
@@ -147,6 +147,55 @@ function lex_validate_appointment_schedule(PDO $pdo, int $lawyerId, string $sche
     }
 
     return ['ok' => true, 'error' => '', 'session' => $session, 'date' => $date, 'time' => $time, 'session_start' => $sessionStart, 'session_end' => $sessionEnd, 'capacity' => $capacity];
+}
+
+/**
+ * Validate a lawyer-selected reschedule. Lawyers can choose any future time,
+ * independent of public booking availability, while existing appointments
+ * for that lawyer may not overlap the 30-minute consultation slot.
+ */
+function lex_validate_lawyer_reschedule(PDO $pdo, int $lawyerId, string $scheduledAt, int $excludeAppointmentId = 0): array
+{
+    try {
+        $dateTime = DateTimeImmutable::createFromFormat('!Y-m-d H:i', $scheduledAt);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (!$dateTime || (is_array($errors) && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return ['ok' => false, 'error' => 'Choose a valid appointment date and time.', 'session' => null];
+        }
+    } catch (Throwable $e) {
+        return ['ok' => false, 'error' => 'Choose a valid appointment date and time.', 'session' => null];
+    }
+
+    if ($dateTime <= new DateTimeImmutable()) {
+        return ['ok' => false, 'error' => 'Choose a future date and time.', 'session' => null];
+    }
+
+    $start = $dateTime->format('Y-m-d H:i:s');
+    $end = $dateTime->modify('+30 minutes')->format('Y-m-d H:i:s');
+    $sql = 'SELECT COUNT(*) FROM appointments
+            WHERE lawyer_id = :lawyer_id
+              AND status IN ("pending", "confirmed")
+              AND scheduled_at < :end_at
+              AND DATE_ADD(scheduled_at, INTERVAL 30 MINUTE) > :start_at';
+    $params = ['lawyer_id' => $lawyerId, 'start_at' => $start, 'end_at' => $end];
+    if ($excludeAppointmentId > 0) {
+        $sql .= ' AND id <> :exclude_id';
+        $params['exclude_id'] = $excludeAppointmentId;
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return ['ok' => false, 'error' => 'That time overlaps another appointment. Please choose another time.', 'session' => 'reschedule'];
+    }
+
+    return [
+        'ok' => true,
+        'error' => '',
+        'session' => 'reschedule',
+        'date' => $dateTime->format('Y-m-d'),
+        'time' => $dateTime->format('H:i'),
+    ];
 }
 
 function lex_audit(string $action, string $table, ?string $targetId = null, ?int $userId = null): void

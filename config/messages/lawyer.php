@@ -638,17 +638,10 @@ if (!in_array($initialMessageFilter, ['all', 'unread', 'important', 'archived'],
           <div class="role-badge"><?= lex_e(lex_message_role_label($selectedKind === 'admin' ? 'admin' : 'client')) ?></div>
           <?php if ($isThreadMuted): ?><div class="role-badge">Muted</div><?php endif; ?>
           <?php if ($videoMeeting): ?>
-            <?php if (!empty($videoMeeting['can_join'])): ?>
-              <a class="button button-primary chat-video-call" href="<?= lex_e(lex_app_url('video/consultation.php?appointment=' . (int) $videoMeeting['id'])) ?>" aria-label="Join video consultation">
-                <span class="chat-video-call-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M5.75 6.25h8.5A2.75 2.75 0 0 1 17 9v6a2.75 2.75 0 0 1-2.75 2.75h-8.5A2.75 2.75 0 0 1 3 15V9a2.75 2.75 0 0 1 2.75-2.75Zm12.5 3.14 2.35-1.53A.9.9 0 0 1 22 8.61v6.78a.9.9 0 0 1-1.4.75l-2.35-1.53V9.39Z" fill="currentColor"/></svg></span>
-                <span>Join Call</span>
-              </a>
-            <?php else: ?>
-              <span class="chat-video-call chat-video-call-disabled" title="The video consultation opens <?= lex_e(date('M j, Y g:i A', strtotime((string) $videoMeeting['scheduled_at']) - (lex_video_join_early_minutes() * 60))) ?>">
-                <span class="chat-video-call-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M5.75 6.25h8.5A2.75 2.75 0 0 1 17 9v6a2.75 2.75 0 0 1-2.75 2.75h-8.5A2.75 2.75 0 0 1 3 15V9a2.75 2.75 0 0 1 2.75-2.75Zm12.5 3.14 2.35-1.53A.9.9 0 0 1 22 8.61v6.78a.9.9 0 0 1-1.4.75l-2.35-1.53V9.39Z" fill="currentColor"/></svg></span>
-                <span>Join Call</span>
-              </span>
-            <?php endif; ?>
+            <a class="button button-primary chat-video-call" href="<?= lex_e(lex_app_url('video/consultation.php?appointment=' . (int) $videoMeeting['id'])) ?>" aria-label="Join video consultation anytime">
+              <span class="chat-video-call-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M5.75 6.25h8.5A2.75 2.75 0 0 1 17 9v6a2.75 2.75 0 0 1-2.75 2.75h-8.5A2.75 2.75 0 0 1 3 15V9a2.75 2.75 0 0 1 2.75-2.75Zm12.5 3.14 2.35-1.53A.9.9 0 0 1 22 8.61v6.78a.9.9 0 0 1-1.4.75l-2.35-1.53V9.39Z" fill="currentColor"/></svg></span>
+              <span>Join Call</span>
+            </a>
           <?php endif; ?>
           <button
             class="icon-chip"
