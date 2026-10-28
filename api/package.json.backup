@@ -1,0 +1,16 @@
+{
+  "name": "lexshield-api",
+  "version": "1.0.0",
+  "description": "LEXSHIELD REST API",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0"
+  }
+}
